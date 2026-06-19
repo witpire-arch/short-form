@@ -1,5 +1,8 @@
 // Vercel Serverless Function — POST /api/generate
-// 환경변수 ANTHROPIC_API_KEY 필요 (Vercel 프로젝트 Settings > Environment Variables)
+// 상품 정보 → Gemini API → 숏폼 대본(JSON) 반환
+// 환경변수: GEMINI_API_KEY  (Google AI Studio에서 무료 발급: aistudio.google.com/apikey)
+
+const MODEL = 'gemini-2.5-flash'; // 무료 티어. 필요시 gemini-2.0-flash 등으로 교체 가능
 
 const DISCLOSURE = {
   coupang:
@@ -33,9 +36,8 @@ function buildSystem(platform) {
 - 해시태그는 검색·노출에 유리한 조합으로 8~12개.
 - description 맨 끝에는 반드시 아래 경제적 이해관계 표시 문구를 그대로 포함하세요:
   "${disclosure}"
-- 절대 마크다운이나 설명을 붙이지 말고, 아래 JSON 형식만 출력하세요.
 
-출력 형식(JSON only):
+아래 JSON 형식으로만 출력하세요:
 {
   "hooks": ["후킹 멘트 A", "후킹 멘트 B", "후킹 멘트 C"],
   "scenes": [
@@ -53,11 +55,11 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'POST 요청만 허용됩니다.' });
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     return res
       .status(500)
-      .json({ error: 'ANTHROPIC_API_KEY 환경변수가 설정되지 않았습니다.' });
+      .json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' });
   }
 
   const {
@@ -87,33 +89,49 @@ export default async function handler(req, res) {
 링크: ${link || '(설명란에 "👇 아래 링크 클릭" 형태로 자리만 표시)'}`;
 
   try {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2500,
-        system: buildSystem(platform),
-        messages: [{ role: 'user', content: userContent }],
-      }),
-    });
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: buildSystem(platform) }] },
+          contents: [{ role: 'user', parts: [{ text: userContent }] }],
+          generationConfig: {
+            responseMimeType: 'application/json',
+            temperature: 0.9,
+            maxOutputTokens: 4096,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        }),
+      }
+    );
 
     const data = await r.json();
 
-    if (data.error) {
-      return res
-        .status(500)
-        .json({ error: data.error.message || 'Anthropic API 오류' });
+    if (!r.ok) {
+      const msg = (data && data.error && data.error.message) || `Gemini 오류(${r.status})`;
+      return res.status(r.status).json({ error: msg });
     }
 
-    const text = (data.content || [])
-      .map((b) => b.text || '')
+    const text = ((data.candidates &&
+      data.candidates[0] &&
+      data.candidates[0].content &&
+      data.candidates[0].content.parts) || [])
+      .map((p) => p.text || '')
       .join('')
       .trim();
+
+    if (!text) {
+      const reason =
+        (data.promptFeedback && data.promptFeedback.blockReason) ||
+        (data.candidates && data.candidates[0] && data.candidates[0].finishReason) ||
+        '빈 응답';
+      return res.status(500).json({ error: `대본 생성 실패: ${reason}` });
+    }
 
     const clean = text.replace(/```json|```/g, '').trim();
 
