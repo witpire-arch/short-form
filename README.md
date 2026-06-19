@@ -15,9 +15,14 @@ shortform-generator/
 1. 위 구조 그대로 GitHub 레포에 push
 2. Vercel에서 Import → 프레임워크 프리셋 "Other" (빌드 설정 없음)
 3. **Settings → Environment Variables** 에 추가:
-   - `ANTHROPIC_API_KEY` = `sk-ant-...` (대본 생성)
+   - `GEMINI_API_KEY` = Google AI Studio API 키 (대본 생성, 무료)
    - `GOOGLE_TTS_API_KEY` = Google Cloud API 키 (음성 합성)
 4. 환경변수 추가 후 **Redeploy** (안 하면 적용 안 됨)
+
+## Gemini 키 (대본 생성)
+- aistudio.google.com/apikey 에서 무료 발급 (결제 설정 불필요)
+- 블로그 도구 등에서 이미 쓰던 키가 있으면 그대로 재사용 가능
+- 모델은 `api/generate.js`의 `MODEL = 'gemini-2.5-flash'` (무료 티어). 필요시 교체.
 
 ## Google Cloud TTS 준비
 1. Google Cloud 콘솔(console.cloud.google.com)에서 프로젝트 생성
