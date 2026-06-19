@@ -170,6 +170,30 @@
   .tip { display: flex; gap: 9px; align-items: flex-start; color: var(--muted); font-size: 13.5px; background: #FBFAFE; border-radius: 9px; padding: 11px 13px; }
   .tip b { color: var(--lav-deep); }
 
+  .voicebar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+    margin: 2px 0 14px; padding: 10px 12px;
+    background: #FBFAFE; border: 1px solid var(--lav-line); border-radius: 9px;
+  }
+  .voicebar label { margin: 0; font-size: 11.5px; color: var(--muted); font-weight: 700; }
+  .voicebar select, .voicebar input {
+    padding: 6px 8px; font-size: 13px; border: 1px solid var(--lav-line);
+    border-radius: 7px; background: #fff; color: var(--ink); font-family: inherit;
+  }
+  .voicebar input.spk { width: 110px; }
+  .voicebar .hint { font-size: 11px; color: var(--muted); margin-left: auto; }
+
+  .aud { display: flex; gap: 6px; margin-top: 8px; }
+  .sbtn {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: #fff; border: 1px solid var(--lav-line); color: var(--lav-deep);
+    padding: 4px 10px; border-radius: 7px; font-family: inherit;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: background .15s, border-color .15s;
+  }
+  .sbtn:hover { background: var(--lav-soft); border-color: var(--lav); }
+  .sbtn:disabled { opacity: .55; cursor: wait; }
+
   footer { margin-top: 36px; color: var(--muted); font-size: 12.5px; text-align: center; }
 </style>
 </head>
@@ -292,19 +316,90 @@
     });
   });
 
+  // ── 음성(TTS) ─────────────────────────────
+  function voiceSettings() {
+    const sel = $('voice');
+    let speaker = sel ? sel.value : 'nara';
+    if (speaker === '__custom') {
+      const c = $('voiceCustom');
+      speaker = (c && c.value.trim()) || 'nara';
+    }
+    const sp = $('speed2');
+    return { speaker, speed: sp ? sp.value : 0 };
+  }
+
+  async function fetchTTS(text) {
+    const { speaker, speed } = voiceSettings();
+    const r = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text, speaker, speed }),
+    });
+    if (!r.ok) {
+      let msg = 'TTS 생성에 실패했습니다.';
+      try { const e = await r.json(); msg = e.error || msg; } catch (_) {}
+      throw new Error(msg);
+    }
+    return r.blob();
+  }
+
+  let currentAudio = null;
+
+  out.addEventListener('change', (e) => {
+    if (e.target.id === 'voice') {
+      const c = $('voiceCustom');
+      if (c) c.style.display = e.target.value === '__custom' ? '' : 'none';
+    }
+  });
+
+  out.addEventListener('click', async (e) => {
+    const b = e.target.closest('.sbtn');
+    if (!b) return;
+    const i = Number(b.dataset.i);
+    const text = ((window.__scenes || [])[i] || {}).narration || '';
+    if (!text) return;
+
+    const isDownload = b.classList.contains('dl');
+    const old = b.textContent;
+    b.disabled = true; b.textContent = '생성 중…';
+    try {
+      const blob = await fetchTTS(text);
+      const url = URL.createObjectURL(blob);
+      if (isDownload) {
+        const a = document.createElement('a');
+        a.href = url; a.download = `scene_${i + 1}.mp3`;
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 4000);
+      } else {
+        if (currentAudio) currentAudio.pause();
+        currentAudio = new Audio(url);
+        currentAudio.play();
+      }
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      b.disabled = false; b.textContent = old;
+    }
+  });
+
   function render(d) {
+    window.__scenes = d.scenes || [];
     const fullScript = (d.scenes || [])
       .map((s) => `[${s.time}] ${s.narration}`).join('\n');
 
     const hooks = (d.hooks || []).map((h) => `
       <div class="hook"><span>${esc(h)}</span>${copyBtn(h)}</div>`).join('');
 
-    const scenes = (d.scenes || []).map((s) => `
+    const scenes = (d.scenes || []).map((s, i) => `
       <div class="scene">
         <div class="t">${esc(s.time)}</div>
         <div>
           <div class="nar">${esc(s.narration)}</div>
           <div class="cap"><b>자막</b> · ${esc(s.caption)}</div>
+          <div class="aud">
+            <button class="sbtn play" data-i="${i}">🔊 듣기</button>
+            <button class="sbtn dl" data-i="${i}">⬇ mp3</button>
+          </div>
         </div>
       </div>`).join('');
 
@@ -318,8 +413,24 @@
 
       <div class="block">
         <div class="block-head">
-          <h3>컷별 대본 + 자막</h3>
+          <h3>컷별 대본 + 자막 · 음성</h3>
           ${copyBtn(fullScript, '대본 전체 복사')}
+        </div>
+        <div class="voicebar">
+          <label>화자</label>
+          <select id="voice">
+            <option value="nara">나라 (여, 차분)</option>
+            <option value="jinho">진호 (남)</option>
+            <option value="__custom">직접 입력 →</option>
+          </select>
+          <input class="spk" id="voiceCustom" placeholder="speaker ID" style="display:none" />
+          <label>속도</label>
+          <select id="speed2">
+            <option value="-1">약간 빠르게</option>
+            <option value="0" selected>보통</option>
+            <option value="1">약간 느리게</option>
+          </select>
+          <span class="hint">CLOVA Voice · 컷마다 mp3로 저장</span>
         </div>
         ${scenes}
       </div>
