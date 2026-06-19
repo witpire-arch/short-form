@@ -8,7 +8,7 @@ shortform-generator/
 ├─ index.html        # 프론트 (바닐라 JS)
 └─ api/
    ├─ generate.js    # 대본 생성 (Claude API)
-   └─ tts.js         # 한국어 음성 합성 (CLOVA Voice)
+   └─ tts.js         # 한국어 음성 합성 (Google Cloud TTS)
 ```
 
 ## 배포 (Vercel)
@@ -16,17 +16,21 @@ shortform-generator/
 2. Vercel에서 Import → 프레임워크 프리셋 "Other" (빌드 설정 없음)
 3. **Settings → Environment Variables** 에 추가:
    - `ANTHROPIC_API_KEY` = `sk-ant-...` (대본 생성)
-   - `CLOVA_CLIENT_ID` = NCP 콘솔 > AI·NAVER API > Application 의 Client ID
-   - `CLOVA_CLIENT_SECRET` = 같은 Application 의 Client Secret
-4. Deploy
+   - `GOOGLE_TTS_API_KEY` = Google Cloud API 키 (음성 합성)
+4. 환경변수 추가 후 **Redeploy** (안 하면 적용 안 됨)
 
-## CLOVA Voice 준비
-- 네이버 클라우드 콘솔 > Services > AI·NAVER API > Application 에서 Application 생성
-- 사용할 API에 **CLOVA Voice** 체크 (안 하면 429 오류)
-- 발급된 Client ID / Secret 을 위 환경변수에 입력
-- 화자(speaker)는 기본 `nara`. 더 자연스러운 NeuVis(Pro) 보이스는 콘솔에서 미리듣고
-  ID를 확인해 프론트의 "직접 입력" 칸에 넣으면 됩니다.
-- 주의: CLOVA Voice는 Application 등록만 해도 기본료가 부과됩니다(호출 없어도). 안 쓰면 Application 삭제.
+## Google Cloud TTS 준비
+1. Google Cloud 콘솔(console.cloud.google.com)에서 프로젝트 생성
+2. "API 및 서비스" → **Cloud Text-to-Speech API** 사용 설정
+3. "사용자 인증 정보" → **API 키** 만들기 → 그 값을 `GOOGLE_TTS_API_KEY`에 입력
+   - (보안 위해 API 키 제한에서 Text-to-Speech API로만 제한 권장)
+4. 무료 한도: WaveNet 월 400만 자, Neural2/Chirp3 HD 각 월 100만 자 (기간 제한 없음).
+   숏폼 볼륨이면 사실상 무료. 단 GCP는 결제수단 등록이 필요할 수 있으나 무료 한도 내에선 청구 없음.
+
+## 보이스
+- 기본 `ko-KR-Wavenet-A`(여). 더 자연스러운 건 `ko-KR-Neural2-A/C`, 최신 고품질은
+  `ko-KR-Chirp3-HD-*` 계열 — 프론트 "직접 입력"에 이름을 넣으면 됩니다.
+- 특정 보이스가 오류 나면 Wavenet 계열(A/B/C/D)로 쓰면 안전합니다.
 
 ## 로컬 테스트
 서버리스 함수가 있어서 정적 서버로는 안 됩니다. Vercel CLI 사용:

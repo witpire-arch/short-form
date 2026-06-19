@@ -319,10 +319,10 @@
   // ── 음성(TTS) ─────────────────────────────
   function voiceSettings() {
     const sel = $('voice');
-    let speaker = sel ? sel.value : 'nara';
+    let speaker = sel ? sel.value : 'ko-KR-Wavenet-A';
     if (speaker === '__custom') {
       const c = $('voiceCustom');
-      speaker = (c && c.value.trim()) || 'nara';
+      speaker = (c && c.value.trim()) || 'ko-KR-Wavenet-A';
     }
     const sp = $('speed2');
     return { speaker, speed: sp ? sp.value : 0 };
@@ -419,18 +419,22 @@
         <div class="voicebar">
           <label>화자</label>
           <select id="voice">
-            <option value="nara">나라 (여, 차분)</option>
-            <option value="jinho">진호 (남)</option>
+            <option value="ko-KR-Wavenet-A">여성 A (Wavenet)</option>
+            <option value="ko-KR-Wavenet-B">여성 B (Wavenet)</option>
+            <option value="ko-KR-Wavenet-C">남성 C (Wavenet)</option>
+            <option value="ko-KR-Wavenet-D">남성 D (Wavenet)</option>
+            <option value="ko-KR-Neural2-A">여성 A (Neural2·고품질)</option>
+            <option value="ko-KR-Neural2-C">남성 C (Neural2·고품질)</option>
             <option value="__custom">직접 입력 →</option>
           </select>
-          <input class="spk" id="voiceCustom" placeholder="speaker ID" style="display:none" />
+          <input class="spk" id="voiceCustom" placeholder="예: ko-KR-Chirp3-HD-Aoede" style="display:none" />
           <label>속도</label>
           <select id="speed2">
             <option value="-1">약간 빠르게</option>
             <option value="0" selected>보통</option>
             <option value="1">약간 느리게</option>
           </select>
-          <span class="hint">CLOVA Voice · 컷마다 mp3로 저장</span>
+          <span class="hint">Google TTS · 컷마다 mp3로 저장</span>
         </div>
         ${scenes}
       </div>
