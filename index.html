@@ -145,6 +145,13 @@
   .copy:hover { background: var(--lav-line); }
   .copy.done { background: #DCEFE7; color: var(--ok); }
 
+  .tovideo {
+    background: var(--lav); color: #fff; border: 0; padding: 5px 12px; border-radius: 7px;
+    font-family: inherit; font-size: 12px; font-weight: 700; cursor: pointer;
+    transition: background .15s; white-space: nowrap;
+  }
+  .tovideo:hover { background: var(--lav-deep); }
+
   .hook {
     background: #FBFAFE; border: 1px solid var(--lav-line); border-left: 3px solid var(--lav);
     border-radius: 9px; padding: 11px 13px; margin-bottom: 9px;
@@ -352,6 +359,19 @@
     }
   });
 
+  out.addEventListener('click', (e) => {
+    if (!e.target.closest('.tovideo')) return;
+    try {
+      const payload = {
+        scenes: (window.__script && window.__script.scenes) || [],
+        title: (window.__script && window.__script.title) || '',
+        voice: voiceSettings(),
+      };
+      sessionStorage.setItem('shortform_script', JSON.stringify(payload));
+    } catch (_) {}
+    window.open('render.html', '_blank');
+  });
+
   out.addEventListener('click', async (e) => {
     const b = e.target.closest('.sbtn');
     if (!b) return;
@@ -384,6 +404,7 @@
 
   function render(d) {
     window.__scenes = d.scenes || [];
+    window.__script = d;
     const fullScript = (d.scenes || [])
       .map((s) => `[${s.time}] ${s.narration}`).join('\n');
 
@@ -414,7 +435,10 @@
       <div class="block">
         <div class="block-head">
           <h3>컷별 대본 + 자막 · 음성</h3>
-          ${copyBtn(fullScript, '대본 전체 복사')}
+          <div style="display:flex;gap:8px">
+            <button class="tovideo">🎬 영상 만들기</button>
+            ${copyBtn(fullScript, '대본 전체 복사')}
+          </div>
         </div>
         <div class="voicebar">
           <label>화자</label>

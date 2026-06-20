@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>영상 만들기 · 끈질긴라벤더</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<style>
+  :root {
+    --bg: #F4F1FA; --surface: #FFFFFF; --ink: #1C1830; --muted: #6E6886;
+    --lav: #6D5BAE; --lav-deep: #4E3F86; --lav-soft: #EAE4F6; --lav-line: #D9D0EE;
+    --ok: #2F8F6B; --warn: #C0573C; --radius: 14px;
+    --shadow: 0 1px 2px rgba(28,24,48,.04), 0 8px 28px rgba(78,63,134,.07);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: "Pretendard", system-ui, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 32px 20px 80px; }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font-family: "Instrument Serif", serif; font-size: 19px; color: var(--lav-deep); }
+  a.back { color: var(--muted); font-size: 13px; text-decoration: none; }
+  a.back:hover { color: var(--lav-deep); }
+  h1 { font-size: clamp(24px, 4vw, 34px); margin: 12px 0 6px; font-weight: 800; letter-spacing: -.02em; }
+  h1 em { font-family: "Instrument Serif", serif; font-style: italic; font-weight: 400; color: var(--lav); }
+  .sub { color: var(--muted); font-size: 14.5px; max-width: 56ch; }
+
+  .grid { display: grid; grid-template-columns: 400px 1fr; gap: 24px; align-items: start; margin-top: 26px; }
+  @media (max-width: 880px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface); border: 1px solid var(--lav-line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 22px; }
+
+  label { display: block; font-size: 12.5px; font-weight: 700; color: var(--lav-deep); margin-bottom: 6px; }
+  label .opt { color: var(--muted); font-weight: 500; }
+  .field { margin-bottom: 16px; }
+  select, input[type="text"], textarea {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--lav-line); border-radius: 10px;
+    font-family: inherit; font-size: 14px; color: var(--ink); background: #FCFBFE;
+  }
+  textarea { resize: vertical; min-height: 90px; font-size: 12.5px; }
+  select:focus, input:focus, textarea:focus { outline: none; border-color: var(--lav); box-shadow: 0 0 0 3px rgba(109,91,174,.16); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .drop {
+    border: 1.5px dashed var(--lav-line); border-radius: 11px; padding: 18px; text-align: center;
+    color: var(--muted); font-size: 13px; cursor: pointer; background: #FBFAFE; transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--lav); background: var(--lav-soft); }
+  .thumbs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
+  .thumbs img { width: 46px; height: 46px; object-fit: cover; border-radius: 7px; border: 1px solid var(--lav-line); }
+
+  button.go {
+    width: 100%; margin-top: 8px; padding: 14px; background: var(--lav); color: #fff; border: 0; border-radius: 11px;
+    font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; transition: background .15s, transform .05s;
+  }
+  button.go:hover { background: var(--lav-deep); }
+  button.go:active { transform: translateY(1px); }
+  button.go:disabled { background: var(--lav-line); cursor: not-allowed; }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .preview-wrap { width: 100%; max-width: 300px; aspect-ratio: 9/16; border-radius: 12px; overflow: hidden; background: #0E0B1A; border: 1px solid var(--lav-line); display: flex; align-items: center; justify-content: center; }
+  .preview-wrap canvas, .preview-wrap video { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .preview-wrap .ph { color: #8A82A6; font-size: 13px; text-align: center; padding: 20px; }
+
+  .status { width: 100%; }
+  .bar { height: 8px; background: var(--lav-soft); border-radius: 99px; overflow: hidden; }
+  .bar > i { display: block; height: 100%; width: 0%; background: var(--lav); transition: width .2s; }
+  .status p { margin: 9px 2px 0; font-size: 13px; color: var(--lav-deep); font-weight: 600; }
+
+  .dl { display: inline-flex; align-items: center; gap: 6px; background: var(--lav-soft); color: var(--lav-deep); border: 0; padding: 9px 16px; border-radius: 9px; font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; }
+  .dl:hover { background: var(--lav-line); }
+  .err { background: #FCEEEA; border: 1px solid #F0C9BC; color: var(--warn); padding: 11px 13px; border-radius: 10px; font-size: 13.5px; width: 100%; }
+  .hint2 { font-size: 11.5px; color: var(--muted); margin-top: 5px; }
+  footer { margin-top: 36px; color: var(--muted); font-size: 12.5px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html">← 생성기로</a>
+  <div style="margin-top:10px"><span class="brand">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3c0 5-3 7-3 10a3 3 0 006 0c0-3-3-5-3-10z" fill="#6D5BAE"/><path d="M12 14v7M9 18l3-1 3 1" stroke="#4E3F86" stroke-width="1.4" stroke-linecap="round"/></svg>
+    끈질긴라벤더</span></div>
+  <h1>대본을 <em>영상으로</em></h1>
+  <p class="sub">대본·음성·자막을 9:16 세로 영상으로 자동 합성합니다. 이미지를 넣으면 상품이 보이고, 안 넣으면 라벤더 배경으로 나옵니다.</p>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="field">
+        <label>대본 <span class="opt">(생성기에서 넘어오면 자동 입력)</span></label>
+        <textarea id="scriptJson" placeholder='생성기에서 "🎬 영상 만들기"를 누르면 자동으로 채워집니다. 직접 붙여넣어도 됩니다(JSON).'></textarea>
+        <div class="hint2" id="scriptInfo"></div>
+      </div>
+
+      <div class="field">
+        <label>상품 이미지 <span class="opt">(여러 장 가능 · 선택)</span></label>
+        <div class="drop" id="imgDrop">이미지를 끌어다 놓거나 클릭해서 선택<br/>안 넣으면 라벤더 그라데이션 배경</div>
+        <input type="file" id="imgInput" accept="image/*" multiple hidden />
+        <div class="thumbs" id="thumbs"></div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>화자</label>
+          <select id="voice">
+            <option value="ko-KR-Wavenet-A">여성 A (Wavenet)</option>
+            <option value="ko-KR-Wavenet-B">여성 B (Wavenet)</option>
+            <option value="ko-KR-Wavenet-C">남성 C (Wavenet)</option>
+            <option value="ko-KR-Wavenet-D">남성 D (Wavenet)</option>
+            <option value="ko-KR-Neural2-A">여성 A (Neural2)</option>
+            <option value="ko-KR-Neural2-C">남성 C (Neural2)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>속도</label>
+          <select id="speed">
+            <option value="-1">약간 빠르게</option>
+            <option value="0" selected>보통</option>
+            <option value="1">약간 느리게</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>해상도</label>
+          <select id="res">
+            <option value="1080">1080×1920 (고화질)</option>
+            <option value="720" selected>720×1280 (빠름·권장)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>배경음 <span class="opt">(선택)</span></label>
+          <input type="file" id="bgmInput" accept="audio/*" />
+        </div>
+      </div>
+
+      <button class="go" id="goBtn">🎬 영상 만들기</button>
+      <div class="hint2">Chrome 권장 · 녹화는 실시간이라 영상 길이만큼 걸립니다.</div>
+    </section>
+
+    <section class="panel">
+      <div class="stage">
+        <div class="preview-wrap" id="previewWrap">
+          <div class="ph" id="ph">여기에 미리보기가 표시됩니다.<br/>왼쪽에서 <b style="color:#B9AEDF">영상 만들기</b>를 누르세요.</div>
+          <canvas id="canvas" width="720" height="1280" style="display:none"></canvas>
+          <video id="video" controls playsinline style="display:none"></video>
+        </div>
+        <div class="status" id="status" style="display:none">
+          <div class="bar"><i id="barFill"></i></div>
+          <p id="statusText">준비 중…</p>
+        </div>
+        <a class="dl" id="dlBtn" style="display:none" download="shortform.webm">⬇ 영상 다운로드</a>
+        <div class="err" id="err" style="display:none"></div>
+      </div>
+    </section>
+  </div>
+
+  <footer>끈질긴라벤더 · 브라우저 자동 렌더</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// ── 대본 로드 (생성기 핸드오프 or 직접) ──────────────
+let SCRIPT = null;
+function loadHandoff() {
+  try {
+    const raw = sessionStorage.getItem('shortform_script');
+    if (raw) {
+      $('scriptJson').value = raw;
+      const obj = JSON.parse(raw);
+      if (obj.voice) {
+        if (obj.voice.speaker) $('voice').value = obj.voice.speaker;
+        if (obj.voice.speed != null) $('speed').value = String(obj.voice.speed);
+      }
+    }
+  } catch (e) {}
+  reflectScript();
+}
+function reflectScript() {
+  try {
+    const obj = JSON.parse($('scriptJson').value.trim());
+    const scenes = obj.scenes || obj; // 배열만 붙여넣은 경우도 허용
+    SCRIPT = Array.isArray(scenes) ? { scenes } : obj;
+    const n = (SCRIPT.scenes || []).length;
+    $('scriptInfo').textContent = n ? `컷 ${n}개 인식됨` : '대본을 인식하지 못했습니다.';
+  } catch (e) {
+    SCRIPT = null;
+    $('scriptInfo').textContent = $('scriptJson').value.trim() ? '⚠ JSON 형식이 아닙니다.' : '';
+  }
+}
+$('scriptJson').addEventListener('input', reflectScript);
+
+// ── 이미지 업로드 ──────────────
+let IMAGES = []; // HTMLImageElement[]
+function addImageFiles(files) {
+  [...files].filter(f => f.type.startsWith('image/')).forEach(f => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      IMAGES.push(img);
+      const t = document.createElement('img'); t.src = url; $('thumbs').appendChild(t);
+    };
+    img.src = url;
+  });
+}
+$('imgDrop').addEventListener('click', () => $('imgInput').click());
+$('imgInput').addEventListener('change', (e) => addImageFiles(e.target.files));
+$('imgDrop').addEventListener('dragover', (e) => { e.preventDefault(); $('imgDrop').classList.add('over'); });
+$('imgDrop').addEventListener('dragleave', () => $('imgDrop').classList.remove('over'));
+$('imgDrop').addEventListener('drop', (e) => { e.preventDefault(); $('imgDrop').classList.remove('over'); addImageFiles(e.dataTransfer.files); });
+
+// ── 유틸 ──────────────
+function setStatus(pct, text) { $('status').style.display = 'block'; $('barFill').style.width = pct + '%'; $('statusText').textContent = text; }
+function showErr(msg) { $('err').style.display = 'block'; $('err').textContent = msg; }
+function clearErr() { $('err').style.display = 'none'; }
+
+function voicePayload() { return { speaker: $('voice').value, speed: $('speed').value }; }
+
+async function ttsBlob(text) {
+  const r = await fetch('/api/tts', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ text, ...voicePayload() }),
+  });
+  if (!r.ok) { let m = 'TTS 실패'; try { m = (await r.json()).error || m; } catch (_) {} throw new Error(m); }
+  return r.blob();
+}
+
+function audioFromBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const el = new Audio(URL.createObjectURL(blob));
+    el.preload = 'auto';
+    el.onloadedmetadata = () => resolve(el);
+    el.onerror = () => reject(new Error('오디오 로드 실패'));
+  });
+}
+
+// ── 캔버스 드로잉 ──────────────
+function drawCover(ctx, img, W, H, zoom) {
+  const ir = img.width / img.height, r = W / H;
+  let dw, dh;
+  if (ir > r) { dh = H * zoom; dw = dh * ir; } else { dw = W * zoom; dh = dw / ir; }
+  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+}
+function drawGradient(ctx, W, H, i) {
+  const hues = [[0x6D,0x5B,0xAE],[0x4E,0x3F,0x86],[0x8A,0x72,0xC8]];
+  const c = hues[i % hues.length];
+  const g = ctx.createLinearGradient(0, 0, W, H);
+  g.addColorStop(0, `rgb(${c[0]},${c[1]},${c[2]})`);
+  g.addColorStop(1, '#1C1830');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+function wrapText(ctx, text, maxW) {
+  const words = (text || '').split(' '); const lines = []; let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+function drawCaption(ctx, text, W, H) {
+  if (!text) return;
+  const fs = Math.round(W * 0.066);
+  ctx.font = `800 ${fs}px Pretendard, sans-serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const lines = wrapText(ctx, text, W * 0.84);
+  const lh = fs * 1.28;
+  const blockH = lines.length * lh;
+  let cy = H * 0.74 - blockH / 2 + lh / 2;
+  // 배경 박스
+  const padX = W * 0.05, padY = fs * 0.45;
+  const boxW = Math.min(W * 0.92, Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2);
+  const boxTop = H * 0.74 - blockH / 2 - padY;
+  ctx.fillStyle = 'rgba(20,16,38,0.55)';
+  const bx = (W - boxW) / 2, bh = blockH + padY * 2, rad = fs * 0.35;
+  ctx.beginPath();
+  ctx.moveTo(bx + rad, boxTop);
+  ctx.arcTo(bx + boxW, boxTop, bx + boxW, boxTop + bh, rad);
+  ctx.arcTo(bx + boxW, boxTop + bh, bx, boxTop + bh, rad);
+  ctx.arcTo(bx, boxTop + bh, bx, boxTop, rad);
+  ctx.arcTo(bx, boxTop, bx + boxW, boxTop, rad);
+  ctx.closePath(); ctx.fill();
+  // 글자
+  for (const l of lines) {
+    ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.16; ctx.strokeStyle = 'rgba(10,7,20,0.9)';
+    ctx.strokeText(l, W / 2, cy);
+    ctx.fillStyle = '#fff'; ctx.fillText(l, W / 2, cy);
+    cy += lh;
+  }
+}
+
+// ── 메인 렌더 ──────────────
+let rendering = false;
+async function render() {
+  if (rendering) return;
+  reflectScript();
+  if (!SCRIPT || !(SCRIPT.scenes || []).length) { showErr('대본이 비어 있습니다. 생성기에서 넘어오거나 JSON을 붙여넣어 주세요.'); return; }
+  if (!window.MediaRecorder) { showErr('이 브라우저는 녹화를 지원하지 않습니다. Chrome을 사용해 주세요.'); return; }
+
+  clearErr(); rendering = true; $('goBtn').disabled = true;
+  $('ph').style.display = 'none'; $('video').style.display = 'none'; $('dlBtn').style.display = 'none';
+
+  const scenes = SCRIPT.scenes;
+  const W = +$('res').value, H = Math.round(W * 16 / 9);
+  const canvas = $('canvas'); canvas.width = W; canvas.height = H;
+  canvas.style.display = 'block';
+  const ctx = canvas.getContext('2d');
+
+  try {
+    // 폰트 로드 보장
+    if (document.fonts && document.fonts.load) { try { await document.fonts.load(`800 64px Pretendard`); await document.fonts.ready; } catch (_) {} }
+
+    // 1) 컷별 음성 생성
+    const audios = [];
+    for (let i = 0; i < scenes.length; i++) {
+      setStatus(Math.round((i / scenes.length) * 40), `음성 생성 중… (${i + 1}/${scenes.length})`);
+      const blob = await ttsBlob(scenes[i].narration || scenes[i].caption || ' ');
+      audios.push(await audioFromBlob(blob));
+    }
+
+    // 2) 오디오 그래프 + 녹화 스트림 준비
+    setStatus(42, '녹화 준비 중…');
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const audioCtx = new AC();
+    if (audioCtx.state === 'suspended') await audioCtx.resume();
+    const dest = audioCtx.createMediaStreamDestination();
+
+    // BGM (선택)
+    let bgmSource = null;
+    const bgmFile = $('bgmInput').files[0];
+    if (bgmFile) {
+      try {
+        const buf = await bgmFile.arrayBuffer();
+        const audioBuf = await audioCtx.decodeAudioData(buf);
+        bgmSource = audioCtx.createBufferSource(); bgmSource.buffer = audioBuf; bgmSource.loop = true;
+        const g = audioCtx.createGain(); g.gain.value = 0.12;
+        bgmSource.connect(g); g.connect(dest);
+      } catch (_) {}
+    }
+
+    const fps = 30;
+    const vStream = canvas.captureStream(fps);
+    const mixed = new MediaStream([...vStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+
+    let mime = 'video/webm';
+    if (MediaRecorder.isTypeSupported('video/mp4')) mime = 'video/mp4';
+    else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')) mime = 'video/webm;codecs=vp9,opus';
+    const rec = new MediaRecorder(mixed, { mimeType: mime, videoBitsPerSecond: 6_000_000 });
+    const chunks = [];
+    rec.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+    const done = new Promise((res) => { rec.onstop = res; });
+
+    rec.start();
+    if (bgmSource) bgmSource.start();
+
+    // 3) 컷 순차 재생 + 캔버스 애니메이션
+    for (let i = 0; i < scenes.length; i++) {
+      setStatus(45 + Math.round((i / scenes.length) * 50), `녹화 중… (${i + 1}/${scenes.length})`);
+      const a = audios[i];
+      const dur = Math.max(a.duration || 2, 1.2);
+      const img = IMAGES.length ? IMAGES[i % IMAGES.length] : null;
+
+      const src = audioCtx.createMediaElementSource(a);
+      src.connect(dest); src.connect(audioCtx.destination);
+
+      let ended = false;
+      a.onended = () => { ended = true; };
+      a.currentTime = 0; await a.play();
+
+      const start = performance.now();
+      await new Promise((resolve) => {
+        function frame() {
+          const t = (performance.now() - start) / 1000;
+          const zoom = 1.04 + 0.08 * Math.min(t / dur, 1); // Ken Burns
+          if (img) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); drawCover(ctx, img, W, H, zoom); }
+          else drawGradient(ctx, W, H, i);
+          // 살짝 어둡게(자막 가독성)
+          if (img) { ctx.fillStyle = 'rgba(10,7,20,0.18)'; ctx.fillRect(0, 0, W, H); }
+          drawCaption(ctx, scenes[i].caption || '', W, H);
+          if (ended || t > dur + 0.5) resolve(); else requestAnimationFrame(frame);
+        }
+        frame();
+      });
+    }
+
+    setStatus(97, '영상 마무리 중…');
+    if (bgmSource) try { bgmSource.stop(); } catch (_) {}
+    rec.stop();
+    await done;
+
+    const blob = new Blob(chunks, { type: mime });
+    const url = URL.createObjectURL(blob);
+    const ext = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
+    canvas.style.display = 'none';
+    const v = $('video'); v.src = url; v.style.display = 'block';
+    const dl = $('dlBtn'); dl.href = url; dl.download = `shortform_${Date.now()}.${ext}`; dl.style.display = 'inline-flex';
+    setStatus(100, `완성! (${ext.toUpperCase()})`);
+  } catch (e) {
+    showErr('렌더 실패: ' + (e.message || e));
+    $('status').style.display = 'none';
+    $('canvas').style.display = 'none';
+    $('ph').style.display = 'block';
+  } finally {
+    rendering = false; $('goBtn').disabled = false;
+  }
+}
+
+$('goBtn').addEventListener('click', render);
+loadHandoff();
+</script>
+</body>
+</html>

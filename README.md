@@ -5,11 +5,20 @@
 ## 구조
 ```
 shortform-generator/
-├─ index.html        # 프론트 (바닐라 JS)
+├─ index.html        # 대본 생성기 (프론트)
+├─ render.html       # 영상 자동 렌더러 (브라우저 녹화)
 └─ api/
-   ├─ generate.js    # 대본 생성 (Claude API)
+   ├─ generate.js    # 대본 생성 (Gemini API)
    └─ tts.js         # 한국어 음성 합성 (Google Cloud TTS)
 ```
+
+## 영상 만들기 (render.html)
+- 생성기에서 대본 생성 후 **🎬 영상 만들기** 버튼 → render.html로 대본이 자동 전달됨
+- 상품 이미지 업로드(선택) → 안 넣으면 라벤더 그라데이션 배경
+- **영상 만들기** 누르면: 컷별 음성 자동 생성(/api/tts) → 자막 합성 → 9:16 영상 녹화 → 다운로드
+- 브라우저에서 직접 녹화(무료·서버 없음). **Chrome 권장.** 녹화는 실시간(영상 길이만큼 소요).
+- 출력: mp4 지원 브라우저면 mp4, 아니면 webm (유튜브는 webm도 업로드 가능)
+- webm을 mp4로 바꾸려면 무료 변환툴(예: CloudConvert) 또는 Vrew로 한 번 거치면 됨
 
 ## 배포 (Vercel)
 1. 위 구조 그대로 GitHub 레포에 push
