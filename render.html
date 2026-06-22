@@ -343,10 +343,21 @@ function drawScrim(ctx, W, H) {
 }
 function drawCaption(ctx, text, W, H, anim) {
   if (!text) return;
-  const fs = Math.round(W * 0.079);
+  text = text.trim();
+  const maxW = W * 0.86;
+  let fs = Math.round(W * 0.079);
   ctx.font = `800 ${fs}px Pretendard, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const lines = wrapText(ctx, text, W * 0.78);
+  // 한 줄에 들어오도록 폰트 자동 축소
+  let tw = ctx.measureText(text).width;
+  const minFs = Math.round(W * 0.046);
+  if (tw > maxW) {
+    fs = Math.max(Math.floor(fs * (maxW / tw)), minFs);
+    ctx.font = `800 ${fs}px Pretendard, sans-serif`;
+    tw = ctx.measureText(text).width;
+  }
+  // 그래도 안 들어가는 아주 긴 문장만 줄바꿈
+  const lines = tw > maxW ? wrapText(ctx, text, maxW) : [text];
   const lh = fs * 1.46;
   const blockH = lines.length * lh;
   const centerY = H * 0.70;
