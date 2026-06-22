@@ -47,7 +47,7 @@
   }
   .drop:hover, .drop.over { border-color: var(--lav); background: var(--lav-soft); }
   .thumbs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
-  .thumbs img { width: 46px; height: 46px; object-fit: cover; border-radius: 7px; border: 1px solid var(--lav-line); }
+  .thumbs img, .thumbs video { width: 46px; height: 46px; object-fit: cover; border-radius: 7px; border: 1px solid var(--lav-line); }
   .urlrow { display: flex; gap: 7px; margin-top: 9px; }
   .urlrow input { flex: 1; }
   #urlBtn { background: var(--lav-soft); color: var(--lav-deep); border: 0; padding: 0 14px; border-radius: 9px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
@@ -97,9 +97,9 @@
       </div>
 
       <div class="field">
-        <label>상품 이미지 <span class="opt">(여러 장 가능 · 선택)</span></label>
-        <div class="drop" id="imgDrop">이미지를 끌어다 놓거나 클릭해서 선택<br/>안 넣으면 라벤더 그라데이션 배경</div>
-        <input type="file" id="imgInput" accept="image/*" multiple hidden />
+        <label>상품 이미지/영상 <span class="opt">(여러 개 가능 · 선택)</span></label>
+        <div class="drop" id="imgDrop">이미지·영상을 끌어다 놓거나 클릭해서 선택<br/>안 넣으면 라벤더 그라데이션 배경</div>
+        <input type="file" id="imgInput" accept="image/*,video/*" multiple hidden />
         <div class="urlrow">
           <input type="text" id="urlInput" placeholder="상품 페이지 URL → 이미지 자동 추출" />
           <button type="button" id="urlBtn">가져오기</button>
@@ -207,30 +207,48 @@ function reflectScript() {
 }
 $('scriptJson').addEventListener('input', reflectScript);
 
-// ── 이미지 업로드 ──────────────
-let IMAGES = []; // HTMLImageElement[]
-function addImageFiles(files) {
-  [...files].filter(f => f.type.startsWith('image/')).forEach(f => {
+// ── 미디어(이미지/영상) 업로드 ──────────────
+let MEDIA = []; // { type:'image'|'video', el }
+
+function intrinsic(el) {
+  return {
+    w: el.videoWidth || el.naturalWidth || el.width || 1,
+    h: el.videoHeight || el.naturalHeight || el.height || 1,
+  };
+}
+
+function addMediaFiles(files) {
+  [...files].forEach((f) => {
     const url = URL.createObjectURL(f);
-    const img = new Image();
-    img.onload = () => {
-      IMAGES.push(img);
-      const t = document.createElement('img'); t.src = url; $('thumbs').appendChild(t);
-    };
-    img.src = url;
+    if (f.type.startsWith('video/')) {
+      const v = document.createElement('video');
+      v.src = url; v.muted = true; v.loop = true; v.playsInline = true; v.preload = 'auto';
+      v.onloadeddata = () => {
+        MEDIA.push({ type: 'video', el: v });
+        const t = document.createElement('video'); t.src = url; t.muted = true; t.playsInline = true; $('thumbs').appendChild(t);
+      };
+      v.load();
+    } else if (f.type.startsWith('image/')) {
+      const img = new Image();
+      img.onload = () => {
+        MEDIA.push({ type: 'image', el: img });
+        const t = document.createElement('img'); t.src = url; $('thumbs').appendChild(t);
+      };
+      img.src = url;
+    }
   });
 }
 $('imgDrop').addEventListener('click', () => $('imgInput').click());
-$('imgInput').addEventListener('change', (e) => addImageFiles(e.target.files));
+$('imgInput').addEventListener('change', (e) => addMediaFiles(e.target.files));
 $('imgDrop').addEventListener('dragover', (e) => { e.preventDefault(); $('imgDrop').classList.add('over'); });
 $('imgDrop').addEventListener('dragleave', () => $('imgDrop').classList.remove('over'));
-$('imgDrop').addEventListener('drop', (e) => { e.preventDefault(); $('imgDrop').classList.remove('over'); addImageFiles(e.dataTransfer.files); });
+$('imgDrop').addEventListener('drop', (e) => { e.preventDefault(); $('imgDrop').classList.remove('over'); addMediaFiles(e.dataTransfer.files); });
 
 function addImageSrc(src) {
   return new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
-      IMAGES.push(img);
+      MEDIA.push({ type: 'image', el: img });
       const t = document.createElement('img'); t.src = src; $('thumbs').appendChild(t);
       resolve(true);
     };
@@ -294,11 +312,12 @@ function audioFromBlob(blob) {
 }
 
 // ── 캔버스 드로잉 ──────────────
-function drawCover(ctx, img, W, H, zoom) {
-  const ir = img.width / img.height, r = W / H;
+function drawCover(ctx, el, W, H, zoom) {
+  const d = intrinsic(el);
+  const ir = d.w / d.h, r = W / H;
   let dw, dh;
   if (ir > r) { dh = H * zoom; dw = dh * ir; } else { dw = W * zoom; dh = dw / ir; }
-  ctx.drawImage(img, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh);
 }
 function drawGradient(ctx, W, H, i) {
   const hues = [[0x6D,0x5B,0xAE],[0x4E,0x3F,0x86],[0x8A,0x72,0xC8]];
@@ -501,10 +520,15 @@ async function render() {
       setStatus(45 + Math.round((i / scenes.length) * 50), `녹화 중… (${i + 1}/${scenes.length})`);
       const a = audios[i];
       const dur = Math.max(a.duration || 2, 1.2);
-      const img = IMAGES.length ? IMAGES[i % IMAGES.length] : null;
+      const m = MEDIA.length ? MEDIA[i % MEDIA.length] : null;
 
       const src = audioCtx.createMediaElementSource(a);
       src.connect(dest); src.connect(audioCtx.destination);
+
+      // 영상 클립이면 재생 시작 (음소거 — 내레이션은 TTS)
+      if (m && m.type === 'video') {
+        try { m.el.currentTime = 0; m.el.muted = true; await m.el.play(); } catch (_) {}
+      }
 
       let ended = false;
       a.onended = () => { ended = true; };
@@ -514,15 +538,24 @@ async function render() {
       await new Promise((resolve) => {
         function frame() {
           const t = (performance.now() - start) / 1000;
-          const zoom = 1.04 + 0.08 * Math.min(t / dur, 1); // Ken Burns
-          if (img) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); drawCover(ctx, img, W, H, zoom); }
-          else drawGradient(ctx, W, H, i);
+          if (m && m.type === 'video') {
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+            drawCover(ctx, m.el, W, H, 1.02); // 영상은 자체 움직임 (줌 최소)
+          } else if (m && m.type === 'image') {
+            const zoom = 1.04 + 0.08 * Math.min(t / dur, 1); // Ken Burns
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+            drawCover(ctx, m.el, W, H, zoom);
+          } else {
+            drawGradient(ctx, W, H, i);
+          }
           drawScrim(ctx, W, H);
           drawCaption(ctx, scenes[i].caption || '', W, H, t / 0.28);
           if (ended || t > dur + 0.5) resolve(); else requestAnimationFrame(frame);
         }
         frame();
       });
+
+      if (m && m.type === 'video') { try { m.el.pause(); } catch (_) {} }
     }
 
     setStatus(97, '영상 마무리 중…');
