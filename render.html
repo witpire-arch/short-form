@@ -319,6 +319,21 @@ function drawCover(ctx, el, W, H, zoom) {
   if (ir > r) { dh = H * zoom; dw = dh * ir; } else { dw = W * zoom; dh = dw / ir; }
   ctx.drawImage(el, (W - dw) / 2, (H - dh) / 2, dw, dh);
 }
+// 블러 배경 (여백을 검정 대신 흐린 같은 이미지로 채움 — 인스타 감성)
+function drawBlurBg(ctx, el, W, H) {
+  ctx.save();
+  ctx.filter = 'blur(34px) brightness(0.6)';
+  drawCover(ctx, el, W, H, 1.25);
+  ctx.restore();
+}
+// contain 핏 (상품 전체가 보이게) + 켄번스 줌·팬
+function drawContain(ctx, el, W, H, zoom, panX, panY) {
+  const d = intrinsic(el);
+  const ir = d.w / d.h, r = W / H;
+  let dw, dh;
+  if (ir > r) { dw = W * zoom; dh = dw / ir; } else { dh = H * zoom; dw = dh * ir; }
+  ctx.drawImage(el, (W - dw) / 2 + panX, (H - dh) / 2 + panY, dw, dh);
+}
 function drawGradient(ctx, W, H, i) {
   const hues = [[0x6D,0x5B,0xAE],[0x4E,0x3F,0x86],[0x8A,0x72,0xC8]];
   const c = hues[i % hues.length];
@@ -535,19 +550,27 @@ async function render() {
       a.currentTime = 0; await a.play();
 
       const start = performance.now();
+      const PAN = [[1, 0.4], [-1, -0.4], [0.5, 1], [-0.6, -0.8]][i % 4];
       await new Promise((resolve) => {
         function frame() {
           const t = (performance.now() - start) / 1000;
+          const fade = Math.min(t / 0.25, 1); // 컷 페이드인
+          ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+          ctx.save();
+          ctx.globalAlpha = fade;
           if (m && m.type === 'video') {
-            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-            drawCover(ctx, m.el, W, H, 1.02); // 영상은 자체 움직임 (줌 최소)
+            drawCover(ctx, m.el, W, H, 1.04);
           } else if (m && m.type === 'image') {
-            const zoom = 1.04 + 0.08 * Math.min(t / dur, 1); // Ken Burns
-            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-            drawCover(ctx, m.el, W, H, zoom);
+            const p = Math.min(t / dur, 1);
+            const zoom = 1.03 + 0.1 * p; // 켄번스
+            const panX = PAN[0] * W * 0.03 * p;
+            const panY = PAN[1] * H * 0.03 * p;
+            drawBlurBg(ctx, m.el, W, H);
+            drawContain(ctx, m.el, W, H, zoom, panX, panY);
           } else {
             drawGradient(ctx, W, H, i);
           }
+          ctx.restore();
           drawScrim(ctx, W, H);
           drawCaption(ctx, scenes[i].caption || '', W, H, t / 0.28);
           if (ended || t > dur + 0.5) resolve(); else requestAnimationFrame(frame);
