@@ -48,6 +48,11 @@
   .drop:hover, .drop.over { border-color: var(--lav); background: var(--lav-soft); }
   .thumbs { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 10px; }
   .thumbs img { width: 46px; height: 46px; object-fit: cover; border-radius: 7px; border: 1px solid var(--lav-line); }
+  .urlrow { display: flex; gap: 7px; margin-top: 9px; }
+  .urlrow input { flex: 1; }
+  #urlBtn { background: var(--lav-soft); color: var(--lav-deep); border: 0; padding: 0 14px; border-radius: 9px; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  #urlBtn:hover { background: var(--lav-line); }
+  #urlBtn:disabled { opacity: .6; cursor: wait; }
 
   button.go {
     width: 100%; margin-top: 8px; padding: 14px; background: var(--lav); color: #fff; border: 0; border-radius: 11px;
@@ -95,6 +100,11 @@
         <label>상품 이미지 <span class="opt">(여러 장 가능 · 선택)</span></label>
         <div class="drop" id="imgDrop">이미지를 끌어다 놓거나 클릭해서 선택<br/>안 넣으면 라벤더 그라데이션 배경</div>
         <input type="file" id="imgInput" accept="image/*" multiple hidden />
+        <div class="urlrow">
+          <input type="text" id="urlInput" placeholder="상품 페이지 URL → 이미지 자동 추출" />
+          <button type="button" id="urlBtn">가져오기</button>
+        </div>
+        <div class="hint2" id="urlInfo"></div>
         <div class="thumbs" id="thumbs"></div>
       </div>
 
@@ -130,7 +140,13 @@
         </div>
         <div class="field">
           <label>배경음 <span class="opt">(선택)</span></label>
-          <input type="file" id="bgmInput" accept="audio/*" />
+          <select id="bgmMode">
+            <option value="none">없음</option>
+            <option value="calm">자동 생성 · 잔잔</option>
+            <option value="bright">자동 생성 · 밝게</option>
+            <option value="upload">직접 업로드</option>
+          </select>
+          <input type="file" id="bgmInput" accept="audio/*" style="display:none;margin-top:8px" />
         </div>
       </div>
 
@@ -210,6 +226,48 @@ $('imgDrop').addEventListener('dragover', (e) => { e.preventDefault(); $('imgDro
 $('imgDrop').addEventListener('dragleave', () => $('imgDrop').classList.remove('over'));
 $('imgDrop').addEventListener('drop', (e) => { e.preventDefault(); $('imgDrop').classList.remove('over'); addImageFiles(e.dataTransfer.files); });
 
+function addImageSrc(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      IMAGES.push(img);
+      const t = document.createElement('img'); t.src = src; $('thumbs').appendChild(t);
+      resolve(true);
+    };
+    img.onerror = () => resolve(false);
+    img.src = src;
+  });
+}
+
+// URL에서 이미지 자동 추출
+$('urlBtn').addEventListener('click', async () => {
+  const url = $('urlInput').value.trim();
+  if (!url) return;
+  const btn = $('urlBtn'); btn.disabled = true; const old = btn.textContent; btn.textContent = '가져오는 중…';
+  $('urlInfo').textContent = '';
+  try {
+    const r = await fetch('/api/scrape', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ url }) });
+    const data = await r.json();
+    if (!r.ok || data.error) throw new Error(data.error || '가져오기 실패');
+    const imgs = data.images || [];
+    if (!imgs.length) { $('urlInfo').textContent = '이미지를 찾지 못했어요 — 직접 업로드해 주세요.'; }
+    else {
+      let ok = 0;
+      for (const src of imgs) { if (await addImageSrc(src)) ok++; }
+      $('urlInfo').textContent = ok ? `이미지 ${ok}장 추가됨` : '이미지를 불러오지 못했어요.';
+    }
+  } catch (e) {
+    $('urlInfo').textContent = '⚠ ' + e.message + ' — 직접 업로드해 주세요.';
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+});
+
+// 배경음 모드 토글
+$('bgmMode').addEventListener('change', (e) => {
+  $('bgmInput').style.display = e.target.value === 'upload' ? '' : 'none';
+});
+
 // ── 유틸 ──────────────
 function setStatus(pct, text) { $('status').style.display = 'block'; $('barFill').style.width = pct + '%'; $('statusText').textContent = text; }
 function showErr(msg) { $('err').style.display = 'block'; $('err').textContent = msg; }
@@ -251,8 +309,15 @@ function drawGradient(ctx, W, H, i) {
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
 function wrapText(ctx, text, maxW) {
-  const words = (text || '').split(' '); const lines = []; let line = '';
-  for (const w of words) {
+  text = (text || '').trim();
+  const lines = []; let line = '';
+  for (let w of text.split(' ')) {
+    while (ctx.measureText(w).width > maxW && w.length > 1) {
+      let cut = w;
+      while (ctx.measureText(cut).width > maxW && cut.length > 1) cut = cut.slice(0, -1);
+      if (line) { lines.push(line); line = ''; }
+      lines.push(cut); w = w.slice(cut.length);
+    }
     const test = line ? line + ' ' + w : w;
     if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
     else line = test;
@@ -260,35 +325,95 @@ function wrapText(ctx, text, maxW) {
   if (line) lines.push(line);
   return lines;
 }
-function drawCaption(ctx, text, W, H) {
+function roundRect(ctx, x, y, w, h, r) {
+  r = Math.min(r, h / 2, w / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+function drawScrim(ctx, W, H) {
+  const g = ctx.createLinearGradient(0, H * 0.5, 0, H);
+  g.addColorStop(0, 'rgba(10,7,20,0)');
+  g.addColorStop(1, 'rgba(10,7,20,0.72)');
+  ctx.fillStyle = g; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+}
+function drawCaption(ctx, text, W, H, anim) {
   if (!text) return;
-  const fs = Math.round(W * 0.066);
+  const fs = Math.round(W * 0.079);
   ctx.font = `800 ${fs}px Pretendard, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const lines = wrapText(ctx, text, W * 0.84);
-  const lh = fs * 1.28;
+  const lines = wrapText(ctx, text, W * 0.78);
+  const lh = fs * 1.46;
   const blockH = lines.length * lh;
-  let cy = H * 0.74 - blockH / 2 + lh / 2;
-  // 배경 박스
-  const padX = W * 0.05, padY = fs * 0.45;
-  const boxW = Math.min(W * 0.92, Math.max(...lines.map(l => ctx.measureText(l).width)) + padX * 2);
-  const boxTop = H * 0.74 - blockH / 2 - padY;
-  ctx.fillStyle = 'rgba(20,16,38,0.55)';
-  const bx = (W - boxW) / 2, bh = blockH + padY * 2, rad = fs * 0.35;
-  ctx.beginPath();
-  ctx.moveTo(bx + rad, boxTop);
-  ctx.arcTo(bx + boxW, boxTop, bx + boxW, boxTop + bh, rad);
-  ctx.arcTo(bx + boxW, boxTop + bh, bx, boxTop + bh, rad);
-  ctx.arcTo(bx, boxTop + bh, bx, boxTop, rad);
-  ctx.arcTo(bx, boxTop, bx + boxW, boxTop, rad);
-  ctx.closePath(); ctx.fill();
-  // 글자
+  const centerY = H * 0.70;
+
+  const p = Math.min(Math.max(anim, 0), 1);
+  const ease = 1 - Math.pow(1 - p, 3);
+  const scale = 0.84 + 0.16 * ease;
+
+  ctx.save();
+  ctx.globalAlpha = ease;
+  ctx.translate(W / 2, centerY); ctx.scale(scale, scale); ctx.translate(-W / 2, -centerY);
+
+  let cy = centerY - blockH / 2 + lh / 2;
   for (const l of lines) {
-    ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.16; ctx.strokeStyle = 'rgba(10,7,20,0.9)';
+    const tw = ctx.measureText(l).width;
+    const padX = fs * 0.44, padY = fs * 0.30;
+    const pillW = tw + padX * 2, pillH = fs + padY * 2;
+    const bx = W / 2 - pillW / 2, by = cy - pillH / 2;
+    ctx.fillStyle = 'rgba(20,16,38,0.88)';
+    roundRect(ctx, bx, by, pillW, pillH, pillH / 2); ctx.fill();
+    ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.13; ctx.strokeStyle = 'rgba(8,5,16,0.85)';
     ctx.strokeText(l, W / 2, cy);
     ctx.fillStyle = '#fff'; ctx.fillText(l, W / 2, cy);
     cy += lh;
   }
+  ctx.restore();
+}
+
+// ── 저작권 없는 배경음 생성 (Web Audio 신디사이즈) ──────────────
+function startGeneratedBGM(ac, dest, style, total) {
+  const master = ac.createGain();
+  master.gain.value = style === 'bright' ? 0.085 : 0.07;
+  const lp = ac.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = style === 'bright' ? 2800 : 1500;
+  lp.connect(master); master.connect(dest); master.connect(ac.destination);
+
+  const calm = [
+    [146.83, 220.00, 293.66], [196.00, 246.94, 392.00],
+    [174.61, 220.00, 349.23], [130.81, 196.00, 261.63],
+  ];
+  const bright = [
+    [261.63, 329.63, 392.00], [293.66, 369.99, 440.00],
+    [329.63, 392.00, 493.88], [349.23, 440.00, 523.25],
+  ];
+  const prog = style === 'bright' ? bright : calm;
+  const chordDur = style === 'bright' ? 2.4 : 3.4;
+  const t0 = ac.currentTime + 0.05;
+  const oscs = [];
+  let idx = 0;
+  for (let time = 0; time < total + chordDur; time += chordDur) {
+    const chord = prog[idx % prog.length]; idx++;
+    const startAt = t0 + time, endAt = startAt + chordDur;
+    chord.forEach((f) => {
+      const o = ac.createOscillator();
+      o.type = style === 'bright' ? 'triangle' : 'sine';
+      o.frequency.value = f;
+      const g = ac.createGain(); g.gain.value = 0;
+      o.connect(g); g.connect(lp);
+      g.gain.setValueAtTime(0, startAt);
+      g.gain.linearRampToValueAtTime(0.5, startAt + 0.7);
+      g.gain.setValueAtTime(0.5, endAt - 0.7);
+      g.gain.linearRampToValueAtTime(0, endAt);
+      o.start(startAt); o.stop(endAt + 0.1);
+      oscs.push(o);
+    });
+  }
+  return () => { oscs.forEach((o) => { try { o.stop(); } catch (_) {} }); try { master.disconnect(); } catch (_) {} };
 }
 
 // ── 메인 렌더 ──────────────
@@ -327,17 +452,22 @@ async function render() {
     if (audioCtx.state === 'suspended') await audioCtx.resume();
     const dest = audioCtx.createMediaStreamDestination();
 
-    // BGM (선택)
-    let bgmSource = null;
-    const bgmFile = $('bgmInput').files[0];
-    if (bgmFile) {
+    // BGM 준비 (업로드 or 자동 생성)
+    let bgmStarter = null, stopBgm = null;
+    const bgmMode = $('bgmMode').value;
+    const totalDur = audios.reduce((s, a) => s + Math.max(a.duration || 2, 1.2), 0) + 1;
+    if (bgmMode === 'upload' && $('bgmInput').files[0]) {
       try {
-        const buf = await bgmFile.arrayBuffer();
+        const buf = await $('bgmInput').files[0].arrayBuffer();
         const audioBuf = await audioCtx.decodeAudioData(buf);
-        bgmSource = audioCtx.createBufferSource(); bgmSource.buffer = audioBuf; bgmSource.loop = true;
+        const bs = audioCtx.createBufferSource(); bs.buffer = audioBuf; bs.loop = true;
         const g = audioCtx.createGain(); g.gain.value = 0.12;
-        bgmSource.connect(g); g.connect(dest);
+        bs.connect(g); g.connect(dest); g.connect(audioCtx.destination);
+        bgmStarter = () => bs.start();
+        stopBgm = () => { try { bs.stop(); } catch (_) {} };
       } catch (_) {}
+    } else if (bgmMode === 'calm' || bgmMode === 'bright') {
+      bgmStarter = () => { stopBgm = startGeneratedBGM(audioCtx, dest, bgmMode, totalDur); };
     }
 
     const fps = 30;
@@ -353,7 +483,7 @@ async function render() {
     const done = new Promise((res) => { rec.onstop = res; });
 
     rec.start();
-    if (bgmSource) bgmSource.start();
+    if (bgmStarter) bgmStarter();
 
     // 3) 컷 순차 재생 + 캔버스 애니메이션
     for (let i = 0; i < scenes.length; i++) {
@@ -376,9 +506,8 @@ async function render() {
           const zoom = 1.04 + 0.08 * Math.min(t / dur, 1); // Ken Burns
           if (img) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); drawCover(ctx, img, W, H, zoom); }
           else drawGradient(ctx, W, H, i);
-          // 살짝 어둡게(자막 가독성)
-          if (img) { ctx.fillStyle = 'rgba(10,7,20,0.18)'; ctx.fillRect(0, 0, W, H); }
-          drawCaption(ctx, scenes[i].caption || '', W, H);
+          drawScrim(ctx, W, H);
+          drawCaption(ctx, scenes[i].caption || '', W, H, t / 0.28);
           if (ended || t > dur + 0.5) resolve(); else requestAnimationFrame(frame);
         }
         frame();
@@ -386,7 +515,7 @@ async function render() {
     }
 
     setStatus(97, '영상 마무리 중…');
-    if (bgmSource) try { bgmSource.stop(); } catch (_) {}
+    if (stopBgm) stopBgm();
     rec.stop();
     await done;
 
