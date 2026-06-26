@@ -7,7 +7,7 @@
 const ENDPOINT = 'https://texttospeech.googleapis.com/v1/text:synthesize';
 
 // 프론트의 속도 값(-1/0/1) → Google speakingRate
-const RATE = { '-1': 1.12, '0': 1.0, '1': 0.9 };
+const RATE = { '-3': 1.4, '-2': 1.25, '-1': 1.12, '0': 1.0, '1': 0.9 };
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
