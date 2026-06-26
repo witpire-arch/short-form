@@ -296,7 +296,7 @@
     </section>
   </div>
 
-  <footer>끈질긴라벤더 · Vercel + Claude API</footer>
+  <footer>끈질긴라벤더 · 숏폼 대본 생성기</footer>
 </div>
 
 <script>
@@ -436,7 +436,7 @@
         <div class="block-head">
           <h3>컷별 대본 + 자막 · 음성</h3>
           <div style="display:flex;gap:8px">
-            <button class="tovideo">🎬 영상 만들기</button>
+            <button class="tovideo">🎬 영상으로 (베타)</button>
             ${copyBtn(fullScript, '대본 전체 복사')}
           </div>
         </div>
@@ -454,6 +454,8 @@
           <input class="spk" id="voiceCustom" placeholder="예: ko-KR-Chirp3-HD-Aoede" style="display:none" />
           <label>속도</label>
           <select id="speed2">
+            <option value="-3">아주 빠르게 (1.4x)</option>
+            <option value="-2">빠르게 (1.25x)</option>
             <option value="-1">약간 빠르게</option>
             <option value="0" selected>보통</option>
             <option value="1">약간 느리게</option>
