@@ -150,6 +150,17 @@
         </div>
       </div>
 
+      <div class="field">
+        <label>자막 스타일</label>
+        <select id="capStyle">
+          <option value="cinematic" selected>시네마틱 (영화 자막)</option>
+          <option value="dark">다크 알약</option>
+          <option value="lavender">라벤더 알약</option>
+          <option value="yellow">옐로우 포인트</option>
+          <option value="white">화이트 반전</option>
+        </select>
+      </div>
+
       <button class="go" id="goBtn">🎬 영상 만들기</button>
       <div class="hint2">Chrome 권장 · 녹화는 실시간이라 영상 길이만큼 걸립니다.</div>
     </section>
@@ -375,46 +386,140 @@ function drawScrim(ctx, W, H) {
   g.addColorStop(1, 'rgba(10,7,20,0.72)');
   ctx.fillStyle = g; ctx.fillRect(0, H * 0.5, W, H * 0.5);
 }
-function drawCaption(ctx, text, W, H, anim) {
-  if (!text) return;
-  text = text.trim();
+const CAP_THEMES = {
+  dark:     { pill: 'rgba(18,14,34,0.92)',    text: '#ffffff', stroke: 'rgba(6,4,14,0.9)',  dark: false },
+  lavender: { pill: '#6D5BAE',                text: '#ffffff', stroke: 'rgba(38,28,78,0.95)', dark: false },
+  yellow:   { pill: 'rgba(18,14,34,0.94)',    text: '#FFD64A', stroke: 'rgba(6,4,14,0.95)', dark: false },
+  white:    { pill: 'rgba(255,255,255,0.96)', text: '#16122A', stroke: null,                 dark: true },
+};
+
+// *강조* 마커 → 단어별 { t, hi }
+function parseCaptionWords(text) {
+  text = (text || '').trim();
+  const words = [];
+  const parts = text.split(/(\*[^*]+\*)/g).filter(Boolean);
+  for (const part of parts) {
+    const hi = /^\*[^*]+\*$/.test(part);
+    const clean = hi ? part.slice(1, -1) : part;
+    for (const w of clean.split(' ')) if (w) words.push({ t: w, hi });
+  }
+  return words;
+}
+function wordsWidth(ctx, line) {
+  const sp = ctx.measureText(' ').width;
+  let w = 0;
+  line.forEach((word, i) => { if (i) w += sp; w += ctx.measureText(word.t).width; });
+  return w;
+}
+function wrapWords(ctx, words, maxW, maxLines) {
+  const sp = ctx.measureText(' ').width;
+  const lines = []; let line = [], w = 0;
+  for (const word of words) {
+    const ww = ctx.measureText(word.t).width;
+    if (line.length && w + sp + ww > maxW) {
+      lines.push(line); line = []; w = 0;
+      if (maxLines && lines.length >= maxLines) break;
+    }
+    if (line.length) w += sp;
+    line.push(word); w += ww;
+  }
+  if (line.length && (!maxLines || lines.length < maxLines)) lines.push(line);
+  return lines;
+}
+
+function drawCaption(ctx, text, W, H, anim, style) {
+  if (!text || !text.trim()) return;
+  if (style === 'cinematic') return drawCinematicCaption(ctx, text, W, H, anim);
+  const plain = parseCaptionWords(text).map(w => w.t).join(' '); // 알약 계열은 마커 제거
+  drawPillCaption(ctx, plain, W, H, anim, style);
+}
+
+// 영화 자막 스타일: 흰 볼드 + 핵심단어 노랑 + 약한 그림자 + 하단
+function drawCinematicCaption(ctx, text, W, H, anim) {
+  const words = parseCaptionWords(text);
+  let fs = Math.round(W * 0.062);
+  const maxW = W * 0.84;
+  ctx.font = `800 ${fs}px Pretendard, sans-serif`;
+  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+  let lines = wrapWords(ctx, words, maxW, 2);
+  let guard = 0;
+  while (lines.some(l => wordsWidth(ctx, l) > maxW) && fs > W * 0.04 && guard < 10) {
+    fs -= 2; ctx.font = `800 ${fs}px Pretendard, sans-serif`;
+    lines = wrapWords(ctx, words, maxW, 2); guard++;
+  }
+  const lh = fs * 1.18;
+  const blockH = lines.length * lh;
+  const centerY = H * 0.85;
+  const sp = ctx.measureText(' ').width;
+
+  ctx.save();
+  ctx.globalAlpha = Math.min(anim * 1.8, 1);
+  let cy = centerY - blockH / 2 + lh / 2;
+  for (const line of lines) {
+    let x = W / 2 - wordsWidth(ctx, line) / 2;
+    for (const word of line) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = fs * 0.22;
+      ctx.shadowOffsetY = fs * 0.06;
+      ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.05; ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.strokeText(word.t, x, cy);
+      ctx.fillStyle = word.hi ? '#FFD64A' : '#ffffff';
+      ctx.fillText(word.t, x, cy);
+      ctx.restore();
+      x += ctx.measureText(word.t).width + sp;
+    }
+    cy += lh;
+  }
+  ctx.restore();
+}
+
+// 알약 스타일 (다크/라벤더/옐로우/화이트)
+function drawPillCaption(ctx, text, W, H, anim, style) {
+  const th = CAP_THEMES[style] || CAP_THEMES.dark;
   const maxW = W * 0.86;
-  let fs = Math.round(W * 0.079);
+  let fs = Math.round(W * 0.088);
   ctx.font = `800 ${fs}px Pretendard, sans-serif`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  // 한 줄에 들어오도록 폰트 자동 축소
   let tw = ctx.measureText(text).width;
-  const minFs = Math.round(W * 0.046);
+  const minFs = Math.round(W * 0.052);
   if (tw > maxW) {
     fs = Math.max(Math.floor(fs * (maxW / tw)), minFs);
     ctx.font = `800 ${fs}px Pretendard, sans-serif`;
     tw = ctx.measureText(text).width;
   }
-  // 그래도 안 들어가는 아주 긴 문장만 줄바꿈
   const lines = tw > maxW ? wrapText(ctx, text, maxW) : [text];
-  const lh = fs * 1.46;
+  const lh = fs * 1.5;
   const blockH = lines.length * lh;
-  const centerY = H * 0.70;
+  const centerY = H * 0.78;
 
   const p = Math.min(Math.max(anim, 0), 1);
-  const ease = 1 - Math.pow(1 - p, 3);
-  const scale = 0.84 + 0.16 * ease;
+  const c1 = 1.70158, c3 = c1 + 1;
+  const back = p >= 1 ? 1 : 1 + c3 * Math.pow(p - 1, 3) + c1 * Math.pow(p - 1, 2);
+  const scale = 0.6 + 0.4 * back;
 
   ctx.save();
-  ctx.globalAlpha = ease;
+  ctx.globalAlpha = Math.min(p * 1.6, 1);
   ctx.translate(W / 2, centerY); ctx.scale(scale, scale); ctx.translate(-W / 2, -centerY);
 
   let cy = centerY - blockH / 2 + lh / 2;
   for (const l of lines) {
-    const tw = ctx.measureText(l).width;
-    const padX = fs * 0.44, padY = fs * 0.30;
-    const pillW = tw + padX * 2, pillH = fs + padY * 2;
+    const tw2 = ctx.measureText(l).width;
+    const padX = fs * 0.5, padY = fs * 0.34;
+    const pillW = tw2 + padX * 2, pillH = fs + padY * 2;
     const bx = W / 2 - pillW / 2, by = cy - pillH / 2;
-    ctx.fillStyle = 'rgba(20,16,38,0.88)';
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = fs * 0.55;
+    ctx.shadowOffsetY = fs * 0.18;
+    ctx.fillStyle = th.pill;
     roundRect(ctx, bx, by, pillW, pillH, pillH / 2); ctx.fill();
-    ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.13; ctx.strokeStyle = 'rgba(8,5,16,0.85)';
-    ctx.strokeText(l, W / 2, cy);
-    ctx.fillStyle = '#fff'; ctx.fillText(l, W / 2, cy);
+    ctx.restore();
+    if (!th.dark && th.stroke) {
+      ctx.lineJoin = 'round'; ctx.lineWidth = fs * 0.12; ctx.strokeStyle = th.stroke;
+      ctx.strokeText(l, W / 2, cy);
+    }
+    ctx.fillStyle = th.text; ctx.fillText(l, W / 2, cy);
     cy += lh;
   }
   ctx.restore();
@@ -473,6 +578,7 @@ async function render() {
   $('ph').style.display = 'none'; $('video').style.display = 'none'; $('dlBtn').style.display = 'none';
 
   const scenes = SCRIPT.scenes;
+  const capStyle = $('capStyle').value;
   const W = +$('res').value, H = Math.round(W * 16 / 9);
   const canvas = $('canvas'); canvas.width = W; canvas.height = H;
   canvas.style.display = 'block';
@@ -572,7 +678,7 @@ async function render() {
           }
           ctx.restore();
           drawScrim(ctx, W, H);
-          drawCaption(ctx, scenes[i].caption || '', W, H, t / 0.28);
+          drawCaption(ctx, scenes[i].caption || '', W, H, t / 0.28, capStyle);
           if (ended || t > dur + 0.5) resolve(); else requestAnimationFrame(frame);
         }
         frame();
